@@ -1,0 +1,34 @@
+{
+    "name": "@minisquare/react-firestore",
+    "version": "1.0.5",
+    "description": "",
+    "type": "module",
+    "main": "./dist/cjs/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/cjs/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "sideEffects": false,
+    "scripts": {
+        "build": "rimraf dist && tsc && tsc --module CommonJS --outDir dist/cjs --declaration false --emitDeclarationOnly false"
+    },
+    "author": "",
+    "license": "ISC",
+    "peerDependencies": {
+        "firebase": ">=10",
+        "react": ">=17"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.2",
+        "rimraf": "^5.0.10",
+        "typescript": "^5.9.3"
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "target": "ES2019",
+        "module": "ESNext",
+        "declaration": true,
+        "outDir": "dist",
+        "strict": true,
+        "skipLibCheck": true,
+        "moduleResolution": "Node",
+        "jsx": "react-jsx",
+        "sourceMap": true,
+        "allowSyntheticDefaultImports": true
+    },
+    "include": ["src/index.ts"]
+}
