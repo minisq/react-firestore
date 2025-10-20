@@ -73,35 +73,33 @@ export const Docs = <T>({ query, children }: DocsParams<T>) => {
 
 // Form
 
-type Primitive = string | number | boolean | bigint | symbol | null | undefined | Date | Function
+type Primitive = string | number | boolean | null | undefined | Date
 
-type Path<T> = T extends Primitive
+type Clean<T> = NonNullable<T>
+
+export type Path<T> = T extends Primitive
     ? never
     : {
-          [K in keyof T & string]: NonNullable<T[K]> extends Primitive ? K : K | `${K}.${Path<NonNullable<T[K]>>}`
+          [K in keyof T & string]: Clean<T[K]> extends Primitive
+              ? K
+              : Clean<T[K]> extends (infer U)[]
+              ? K | `${K}.${number}` | `${K}.${number}.${Path<U>}`
+              : K | `${K}.${Path<Clean<T[K]>>}`
       }[keyof T & string]
 
-type PathValue<T, P extends string> = P extends `${infer K}.${infer R}`
+export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
     ? K extends keyof T
-        ? PathValue<NonNullable<T[K]>, R>
+        ? Clean<T[K]> extends (infer U)[]
+            ? Rest extends `${number}.${infer Tail}`
+                ? PathValue<U, Tail>
+                : Rest extends `${number}`
+                ? U
+                : never
+            : PathValue<Clean<T[K]>, Rest>
         : never
     : P extends keyof T
-    ? NonNullable<T[P]>
+    ? T[P]
     : never
-
-const updateObject = <T, P extends Path<T>>(obj: T, path: P, value: PathValue<T, P>) => {
-    const keys = (path as string).split(".")
-    const clone: any = Array.isArray(obj) ? [...(obj as any)] : { ...(obj as any) }
-    let cur: any = clone
-    for (let i = 0; i < keys.length - 1; i++) {
-        const k = keys[i]!
-        const next = cur[k]
-        cur[k] = next == null ? {} : Array.isArray(next) ? [...next] : { ...next }
-        cur = cur[k]
-    }
-    cur[keys[keys.length - 1]!] = value
-    return clone as T
-}
 
 type FormParams<T> = {
     docRef: DocumentReference<T>
@@ -139,21 +137,54 @@ export const Form = <T>({ docRef, children }: FormParams<T>) => {
         }
     }, [docRef])
 
-    const update = useCallback(<P extends Path<T>>(path: P, value: PathValue<T, P>) => {
+    const update = React.useCallback(<P extends Path<T>>(path: P, value: PathValue<T, P>) => {
         setData((prev) => {
-            const next: any = { ...(prev ?? {}) }
-            const keys = path.split(".")
-            let cur = next
+            const root: any = Array.isArray(prev) ? [...(prev as any[])] : { ...(prev ?? {}) }
 
-            for (let i = 0; i < keys.length - 1; i++) {
-                const k = keys[i]!
-                if (typeof cur[k] !== "object" || cur[k] === null) cur[k] = {}
-                else cur[k] = Array.isArray(cur[k]) ? [...cur[k]] : { ...cur[k] }
-                cur = cur[k]
+            // "a.b.2.c" -> ["a","b",2,"c"]
+            const segments = String(path)
+                .split(".")
+                .map((s) => {
+                    const n = Number(s)
+                    return Number.isInteger(n) && s.trim() !== "" ? n : s
+                })
+
+            let cur: any = root
+            for (let i = 0; i < segments.length - 1; i++) {
+                const seg = segments[i]!
+                const nextSeg = segments[i + 1]!
+
+                if (typeof seg === "number") {
+                    // ensure array at this level
+                    if (!Array.isArray(cur)) throw new Error(`Expected array at segment ${seg}`)
+                    const existing = cur[seg]
+                    const emptyChild = typeof nextSeg === "number" ? [] : {}
+                    cur[seg] =
+                        existing == null ? emptyChild : Array.isArray(existing) ? [...existing] : typeof existing === "object" ? { ...existing } : emptyChild
+                    cur = cur[seg]
+                } else {
+                    const existing = cur[seg]
+                    const emptyChild = typeof nextSeg === "number" ? [] : {}
+                    cur[seg] =
+                        existing == null ? emptyChild : Array.isArray(existing) ? [...existing] : typeof existing === "object" ? { ...existing } : emptyChild
+                    cur = cur[seg]
+                }
             }
 
-            cur[keys[keys.length - 1]!] = value
-            return next
+            const leaf = segments[segments.length - 1]!
+            if (typeof leaf === "number") {
+                if (!Array.isArray(cur)) throw new Error(`Expected array at final segment ${leaf}`)
+                const clone = [...cur]
+                clone[leaf] = value as unknown
+                // assign back to parent (cur is a ref to the array we cloned)
+                // find where this array sits and replace; easiest is mutate in place:
+                cur.length = 0
+                clone.forEach((x) => cur.push(x))
+            } else {
+                cur[leaf] = value as unknown
+            }
+
+            return root
         })
     }, [])
 
